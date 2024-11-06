@@ -116,7 +116,7 @@ func (lock *RedisDistributedLock) acquireLock() error {
 	//使用Hset来实现分布式锁，支持可重入
 	keys := []string{lock.getLockKey()}
 	args := []interface{}{lock.holder, lock.expireTime / 1000}
-	result, err := Rclient.Eval(CheckAndReentry, keys, args...).Result()
+	result, err := lock.client.Eval(CheckAndReentry, keys, args...).Result()
 	if err != nil {
 		return err
 	}
@@ -167,7 +167,6 @@ func (lock *RedisDistributedLock) blocking(ctx context.Context) error {
 // 尝试启动看门狗
 func (lock *RedisDistributedLock) startWatchDog(ctx context.Context) {
 	//只有在isWatching从0到1的上升沿才会开启看门狗守护协程（即只在首次加锁时执行）,否则仅对【isWatching表示的重入计数值】进行加1操作
-	// if atomic.AddInt32(&lock.isWatching, 1) == 1 {
 	if lock.isWatching.Add(1) == 1 {
 		ctx, lock.stopWatching = context.WithCancel(ctx)
 		go func() {
@@ -205,12 +204,11 @@ func (lock *RedisDistributedLock) resetLockExpireTime() error {
 	*/
 
 	//基于hset
-	result, err := Rclient.Eval(CheckAndResetExpire, keys, args...).Result()
+	result, err := lock.client.Eval(CheckAndResetExpire, keys, args...).Result()
 	if err != nil {
 		return err
 	}
 
-	fmt.Println("重置锁过期时间：", result, err)
 	if ret, _ := result.(int64); ret != 1 {
 		return errors.New("lock dose not exist")
 	}
@@ -233,7 +231,7 @@ func (lock *RedisDistributedLock) Unlock() error {
 	//删除分布式锁（基于hset）
 	keys := []string{lock.getLockKey()}
 	args := []interface{}{lock.holder}
-	result, err := Rclient.Eval(CheckAndDeleteReentryLock, keys, args...).Result()
+	result, err := lock.client.Eval(CheckAndDeleteReentryLock, keys, args...).Result()
 	if err != nil {
 		return err
 	}
