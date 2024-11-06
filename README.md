@@ -1,0 +1,2 @@
+# go_redis_distributed_lock
+基于Go语言的redis分布式锁基础框架
